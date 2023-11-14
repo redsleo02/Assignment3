@@ -1,19 +1,14 @@
 package com.assignment3.spark;
 
-import java.util.Arrays;
 import java.util.Iterator;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.*;
-import org.apache.spark.SparkFiles;
 import java.util.List;
 import java.util.ArrayList;
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Row;
 
 import scala.Tuple2;
 
-import org.apache.spark.sql.Dataset;
 
 public class WordCount {
 
@@ -21,30 +16,43 @@ public class WordCount {
     {
         @Override
         public Iterator<String> call(String s) {
-            /*
-             * add your code to filter words
-             */
             String[] subStrings = s.split("\\s+");
-            return Arrays.asList(subStrings).iterator();
+            List<String> filteredWords = new ArrayList<>();
+
+            for (String word: subStrings){
+                String cleanedWord = word.toLowerCase().replaceAll("[^a-zA-Z]", "");
+                if (!cleanedWord.isEmpty()){
+                    filteredWords.add(cleanedWord);
+                }
+            }
+            return filteredWords.iterator();
         }
 
     }
 
     public static void main(String[] args) {
-        String textFilePath = "input/pigs.txt"; // update to HDFS url for task2
-        SparkConf conf = new SparkConf().setAppName("WordCountWithSpark").setMaster("local[*]"); // task2: update the setMaster with your cluster master URL for executing this code on the cluster
+        String textFilePath = "hdfs://192.168.23.174:9000/sparkApp/input/pigs.txt";
+        // update to HDFS url for task2
+        SparkConf conf = new SparkConf().setAppName("WordCountWithSpark").setMaster("spark://192.168.23.174:7077");
+         // task2: update the setMaster with your cluster master URL for executing this code on the cluster
         JavaSparkContext sparkContext =  new JavaSparkContext(conf);
         JavaRDD<String> textFile = sparkContext.textFile(textFilePath);
         JavaRDD<String> words = textFile.flatMap(new Filter());
 
-        /*
-         * add your code for key value mapping
-         *
-         * add your code to perform reduce on the given key value pairs
-         *
-         * print the word count and save the output in the format, e.g.,(in:15) to an 'output' folder (on HDFS for task 2)
-         * try to consolidate your output into single text file if you want to check your output against the given sample output
-         */
+        //key value mapping
+        JavaPairRDD<String, Integer> pairs = words.mapToPair(word -> new Tuple2<>(word, 1));
+        //performing Reduce on the given key value pairs
+        JavaPairRDD<String, Integer> wordCounts = pairs.reduceByKey((a, b) -> a + b);
+
+        //print the word count
+        wordCounts.foreach(pair -> {
+            System.out.println("(" + pair._1() + ":" + pair._2() + ")");
+        });
+
+        //saving the output
+        wordCounts.saveAsTextFile("hdfs://192.168.23.174:9000/sparkApp/output");
+
+
         sparkContext.stop();
         sparkContext.close();
     }
